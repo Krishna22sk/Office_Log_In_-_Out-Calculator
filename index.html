@@ -185,6 +185,7 @@ tr:hover td{background:var(--surface-2);}
 }
 .cal-cell .d{font-family:var(--mono);font-weight:600;}
 .cal-cell.present{border-color:var(--teal);}
+.cal-cell.incomplete{border-color:var(--amber);background:rgba(226,150,58,.08);}
 .cal-cell.leave{border-color:var(--red);background:rgba(192,72,61,.08);}
 .cal-cell.empty{visibility:hidden;}
 .dot{width:6px;height:6px;border-radius:50%;}
@@ -423,36 +424,48 @@ canvas{max-height:280px;}
           <label for="attDate">Date</label>
           <input type="date" id="attDate" required>
           
-          <div class="form-row">
-            <div>
-              <label>In Time</label>
+          <div style="display:flex; flex-direction:column; gap:16px; margin-top:14px;">
+            <!-- PUNCH IN SECTION -->
+            <div style="border: 1px solid var(--border); padding: 14px; border-radius: 8px; background: var(--surface-2);">
+              <h4 style="margin: 0 0 10px 0; color: var(--teal); display: flex; align-items: center; gap: 6px;">
+                🔑 Login (Punch In)
+              </h4>
               <div class="time-select-group" id="attInGroup">
-                <select class="sel-hr" required></select>
-                <select class="sel-min" required></select>
-                <select class="sel-ampm" required>
+                <select class="sel-hr"></select>
+                <select class="sel-min"></select>
+                <select class="sel-ampm">
                   <option value="AM" selected>AM</option>
                   <option value="PM">PM</option>
                 </select>
                 <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
               </div>
+              <button class="btn btn-primary btn-sm" id="btnPunchIn" type="button" style="margin-top: 12px; width: 100%;">Punch In (Login)</button>
+              <!-- PUNCH NOTICED BANNER -->
+              <div id="punchInNotice" style="margin-top: 10px; padding: 8px; border-radius: 6px; background: rgba(47, 122, 120, 0.12); color: var(--teal); font-size: 12px; font-weight: 600; display: none; text-align: center; border: 1px dashed var(--teal);">
+                ✓ Punch Noticed at <span id="punchInNoticeTime"></span>
+              </div>
             </div>
-            <div>
-              <label>Out Time</label>
+
+            <!-- PUNCH OUT SECTION -->
+            <div style="border: 1px solid var(--border); padding: 14px; border-radius: 8px; background: var(--surface-2);">
+              <h4 style="margin: 0 0 10px 0; color: var(--red); display: flex; align-items: center; gap: 6px;">
+                🚪 Logout (Punch Out)
+              </h4>
               <div class="time-select-group" id="attOutGroup">
-                <select class="sel-hr" required></select>
-                <select class="sel-min" required></select>
-                <select class="sel-ampm" required>
+                <select class="sel-hr"></select>
+                <select class="sel-min"></select>
+                <select class="sel-ampm">
                   <option value="AM">AM</option>
                   <option value="PM" selected>PM</option>
                 </select>
                 <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
               </div>
+              <button class="btn btn-danger btn-sm" id="btnPunchOut" type="button" style="margin-top: 12px; width: 100%;">Punch Out (Logout)</button>
             </div>
           </div>
           
-          <div class="result-strip" id="attLive"></div>
-          <button class="btn btn-primary" type="submit">Save Attendance</button>
-          <button class="btn btn-outline" type="button" id="attCancelEdit" style="display:none;">Cancel edit</button>
+          <div class="result-strip" id="attLive" style="margin-top: 14px;"></div>
+          <button class="btn btn-outline" type="button" id="attCancelEdit" style="display:none; margin-top: 10px; width: 100%;">Cancel edit</button>
         </form>
       </div>
       <div class="card">
@@ -818,7 +831,7 @@ function populateTimeDropdowns() {
 
 function applyDefaultTimes() {
   setTimeInGroup('attInGroup', DB.settings.officeStart);
-  setTimeInGroup('attOutGroup', DB.settings.officeEnd);
+  setTimeInGroup('attOutGroup', '18:30');
   setTimeInGroup('permOutGroup', '');
   setTimeInGroup('permInGroup', '');
 }
@@ -1026,8 +1039,69 @@ document.getElementById('settingsForm').addEventListener('submit', e=>{
 /* =========================================================
    ATTENDANCE FORM + LIVE CALC
 ========================================================= */
+/* =========================================================
+   ATTENDANCE FORM + LIVE CALC
+========================================================= */
 const attForm = document.getElementById('attendanceForm');
 document.getElementById('attDate').value = todayStr();
+
+function showToastNotification(msg) {
+  const div = document.createElement('div');
+  div.style.position = 'fixed';
+  div.style.bottom = '20px';
+  div.style.left = '50%';
+  div.style.transform = 'translateX(-50%)';
+  div.style.background = 'var(--teal)';
+  div.style.color = '#fff';
+  div.style.padding = '10px 20px';
+  div.style.borderRadius = '8px';
+  div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  div.style.zIndex = '9999';
+  div.style.fontFamily = 'var(--body)';
+  div.style.fontSize = '14px';
+  div.style.fontWeight = '600';
+  div.textContent = msg;
+  document.body.appendChild(div);
+  setTimeout(() => {
+    div.style.transition = 'opacity 0.5s';
+    div.style.opacity = '0';
+    setTimeout(() => div.remove(), 500);
+  }, 2000);
+}
+
+function checkAndPopulateDateRecord() {
+  const dateVal = document.getElementById('attDate').value;
+  const existing = DB.attendance.find(r => r.date === dateVal);
+  
+  // Look up pending punch-in time in DB.pendingPunches
+  const pendingIn = DB.pendingPunches ? DB.pendingPunches[dateVal] : null;
+  const noticeBox = document.getElementById('punchInNotice');
+  const noticeTimeSpan = document.getElementById('punchInNoticeTime');
+  
+  if (pendingIn) {
+    noticeBox.style.display = 'block';
+    noticeTimeSpan.textContent = to12Hr(pendingIn);
+    setTimeInGroup('attInGroup', pendingIn);
+  } else {
+    noticeBox.style.display = 'none';
+  }
+  
+  if (existing) {
+    document.getElementById('attEditId').value = existing.id;
+    setTimeInGroup('attInGroup', existing.inTime);
+    setTimeInGroup('attOutGroup', existing.outTime);
+    document.getElementById('attCancelEdit').style.display = 'inline-block';
+  } else {
+    document.getElementById('attEditId').value = '';
+    if (!pendingIn) {
+      setTimeInGroup('attInGroup', DB.settings.officeStart);
+    }
+    setTimeInGroup('attOutGroup', '18:30');
+    document.getElementById('attCancelEdit').style.display = 'none';
+  }
+  attLivePreview();
+}
+
 function attLivePreview(){
   const rec = {
     inTime: getTimeFromGroup('attInGroup'),
@@ -1035,8 +1109,13 @@ function attLivePreview(){
     breakMinutes: 60
   };
   const box = document.getElementById('attLive');
-  if(!rec.inTime || !rec.outTime){ box.innerHTML=''; return; }
+  if(!rec.inTime && !rec.outTime){ box.innerHTML=''; return; }
   const c = computeAttendance(rec, DB.settings);
+  if (c.isIncomplete) {
+    let statusText = rec.inTime ? "Punched In" : "Punched Out";
+    box.innerHTML = `<div class="chip" style="border-color:var(--amber); color:var(--amber);">Status<b>${statusText}</b></div>`;
+    return;
+  }
   box.innerHTML = `
     <div class="chip">Total Working<b>${minsToHM(c.totalM)}</b></div>
     <div class="chip">Net Working<b>${minsToHM(c.netM)}</b></div>
@@ -1048,37 +1127,73 @@ function attLivePreview(){
 document.getElementById('attInGroup').addEventListener('change', attLivePreview);
 document.getElementById('attOutGroup').addEventListener('change', attLivePreview);
 
-attForm.addEventListener('submit', e=>{
-  e.preventDefault();
-  const editId = document.getElementById('attEditId').value;
-  const rec = {
-    id: editId || uid(),
-    date: document.getElementById('attDate').value,
-    inTime: getTimeFromGroup('attInGroup'),
-    outTime: getTimeFromGroup('attOutGroup'),
-    breakMinutes: 60
-  };
-  if(editId){
-    const idx = DB.attendance.findIndex(r=>r.id===editId);
-    if(idx>-1) DB.attendance[idx]=rec;
-  } else {
-    DB.attendance = DB.attendance.filter(r=>r.date!==rec.date);
-    DB.attendance.push(rec);
-  }
+document.getElementById('btnPunchIn').addEventListener('click', () => {
+  const dateVal = document.getElementById('attDate').value;
+  if (!dateVal) { alert('Please select a date.'); return; }
+  const inTime = getTimeFromGroup('attInGroup');
+  if (!inTime) { alert('Please select In Time.'); return; }
+  
+  // Store punch-in temporarily in DB.pendingPunches (does NOT save to DB.attendance yet)
+  DB.pendingPunches = DB.pendingPunches || {};
+  DB.pendingPunches[dateVal] = inTime;
   saveDB();
-  attForm.reset();
-  applyDefaultTimes();
-  document.getElementById('attEditId').value='';
-  document.getElementById('attCancelEdit').style.display='none';
-  document.getElementById('attLive').innerHTML='';
+  
+  showToastNotification("Punch Noticed");
+  
+  // Refresh UI to show "Punch Noticed" banner
+  checkAndPopulateDateRecord();
   renderAll();
 });
+
+document.getElementById('btnPunchOut').addEventListener('click', () => {
+  const dateVal = document.getElementById('attDate').value;
+  if (!dateVal) { alert('Please select a date.'); return; }
+  const outTime = getTimeFromGroup('attOutGroup');
+  if (!outTime) { alert('Please select Out Time.'); return; }
+  
+  // Retrieve the temporary punch-in time if available
+  const inTime = (DB.pendingPunches && DB.pendingPunches[dateVal]) || '';
+  
+  const existing = DB.attendance.find(r => r.date === dateVal);
+  if (existing) {
+    existing.inTime = inTime || existing.inTime;
+    existing.outTime = outTime;
+  } else {
+    DB.attendance.push({
+      id: uid(),
+      date: dateVal,
+      inTime: inTime,
+      outTime: outTime,
+      breakMinutes: 60
+    });
+  }
+  
+  // Clean up pending punch-in time once saved
+  if (DB.pendingPunches) {
+    delete DB.pendingPunches[dateVal];
+  }
+  
+  saveDB();
+  afterPunchSave();
+  showToastNotification("Attendance Logged Successfully");
+});
+
+function afterPunchSave() {
+  attForm.reset();
+  applyDefaultTimes();
+  document.getElementById('attEditId').value = '';
+  document.getElementById('attCancelEdit').style.display = 'none';
+  document.getElementById('attLive').innerHTML = '';
+  renderAll();
+  checkAndPopulateDateRecord();
+}
+
 document.getElementById('attCancelEdit').addEventListener('click', ()=>{
   attForm.reset();
   applyDefaultTimes();
   document.getElementById('attEditId').value='';
   document.getElementById('attCancelEdit').style.display='none';
-  attLivePreview();
+  checkAndPopulateDateRecord();
 });
 
 /* =========================================================
@@ -1207,10 +1322,21 @@ function renderRecentAttendance(){
   el.innerHTML = `<table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>
   ${rows.map(r=>{
     const c = computeAttendance(r, DB.settings);
-    let badge = '<span class="badge ontime">On time</span>';
-    if(c.lateM>0) badge = '<span class="badge late">Late</span>';
-    if(c.overtimeM>0) badge += ' <span class="badge ot">OT</span>';
-    return `<tr><td class="mono">${fmtDate(r.date)}</td><td class="mono">${to12Hr(r.inTime)}</td><td class="mono">${to12Hr(r.outTime)}</td><td class="mono">${minsToHM(c.netM)}</td><td>${badge}</td>
+    let badge = '';
+    let inStr = r.inTime ? to12Hr(r.inTime) : '—';
+    let outStr = r.outTime ? to12Hr(r.outTime) : '—';
+    let netStr = '—';
+    
+    if (c.isIncomplete) {
+      badge = `<span class="badge" style="background:rgba(226,150,58,0.15); color:var(--amber); font-weight:600;">${r.inTime ? 'Punched In' : 'Punched Out'}</span>`;
+    } else {
+      badge = '<span class="badge ontime">On time</span>';
+      if(c.lateM>0) badge = '<span class="badge late">Late</span>';
+      if(c.overtimeM>0) badge += ' <span class="badge ot">OT</span>';
+      netStr = minsToHM(c.netM);
+    }
+    
+    return `<tr><td class="mono">${fmtDate(r.date)}</td><td class="mono">${inStr}</td><td class="mono">${outStr}</td><td class="mono">${netStr}</td><td>${badge}</td>
     <td><button class="btn btn-outline btn-sm btn-edit" data-id="${r.id}" data-type="attendance">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.id}" data-type="attendance">Del</button></td></tr>`;
   }).join('')}
   </tbody></table>`;
@@ -1290,9 +1416,15 @@ function renderDashboard(){
 
   const todayNet = todayAtt ? computeAttendance(todayAtt, DB.settings).netM : 0;
   const todayPermMin = todayPerms.reduce((s,r)=>s+computePermission(r),0);
+  
+  let workingVal = '—';
+  if (todayAtt) {
+    const c = computeAttendance(todayAtt, DB.settings);
+    workingVal = c.isIncomplete ? 'Punched In' : minsToHM(todayNet);
+  }
 
   const cards = [
-    {label:"Today's Working Hours", value: todayAtt ? minsToHM(todayNet) : '—'},
+    {label:"Today's Working Hours", value: workingVal},
     {label:"Today's Permission Time", value: todayPermMin ? minsToHM(todayPermMin) : '—'},
     {label:"This Month's Leave", value: `${leaveDays} day(s)`},
     {label:"Attendance %", value: `${attendancePct}%`},
@@ -1330,10 +1462,12 @@ function renderDashboard(){
    CALENDAR (mini + full)
 ========================================================= */
 function dayStatus(dateStr){
-  const att = DB.attendance.some(r=>r.date===dateStr);
+  const attRec = DB.attendance.find(r=>r.date===dateStr);
+  const att = !!attRec;
+  const attIncomplete = attRec ? (!attRec.inTime || !attRec.outTime) : false;
   const perm = DB.permissions.some(r=>r.date===dateStr);
   const leave = DB.leaves.some(r=> dateStr>=r.start && dateStr<=r.end);
-  return {att, perm, leave};
+  return {att, attIncomplete, perm, leave};
 }
 function buildCalendarGrid(container, refDate){
   const year = refDate.getFullYear(), month = refDate.getMonth();
@@ -1347,11 +1481,14 @@ function buildCalendarGrid(container, refDate){
     const isSun = isSunday(dateStr);
     let cls = 'cal-cell';
     if(st.leave) cls += ' leave'; 
-    else if(st.att) cls += ' present';
+    else if(st.att) {
+      if(st.attIncomplete) cls += ' incomplete';
+      else cls += ' present';
+    }
     else if(isSun) cls += ' leave'; // treat Sunday as holiday (leave color) if no attendance logged
     
     html += `<div class="${cls}" data-date="${dateStr}"><span class="d">${d}</span>
-      <span style="display:flex;gap:3px;">${st.att&&!st.leave?'<span class="dot present"></span>':''}${st.perm?'<span class="dot perm"></span>':''}${st.leave?'<span class="dot leave"></span>':''}</span>
+      <span style="display:flex;gap:3px;">${st.att&&!st.leave?`<span class="dot ${st.attIncomplete?'perm':'present'}"></span>`:''}${st.perm?'<span class="dot perm"></span>':''}${st.leave?'<span class="dot leave"></span>':''}</span>
     </div>`;
   }
   container.innerHTML = html;
@@ -1413,7 +1550,13 @@ function renderHistory(){
     let details='', actions='';
     if(r.kind==='Attendance'){
       const c = computeAttendance(r.raw, DB.settings);
-      details = `In ${to12Hr(r.raw.inTime)} → Out ${to12Hr(r.raw.outTime)} · Net ${minsToHM(c.netM)}`;
+      let detailsText = '';
+      if (c.isIncomplete) {
+        detailsText = `In ${r.raw.inTime ? to12Hr(r.raw.inTime) : '—'} · Out ${r.raw.outTime ? to12Hr(r.raw.outTime) : '—'} · Punched In`;
+      } else {
+        detailsText = `In ${to12Hr(r.raw.inTime)} → Out ${to12Hr(r.raw.outTime)} · Net ${minsToHM(c.netM)}`;
+      }
+      details = detailsText;
       actions = `<button class="btn btn-outline btn-sm btn-edit" data-id="${r.raw.id}" data-type="attendance">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.raw.id}" data-type="attendance">Del</button>`;
     } else if(r.kind==='Permission'){
       details = `Out ${to12Hr(r.raw.permOut)} → In ${to12Hr(r.raw.permIn)} · ${minsToHM(computePermission(r.raw))}`;
@@ -1773,18 +1916,11 @@ document.addEventListener('click', e => {
   if (cell && cell.dataset.date) {
     const dateStr = cell.dataset.date;
     document.getElementById('attDate').value = dateStr;
-    attForm.reset();
-    document.getElementById('attDate').value = dateStr;
-    applyDefaultTimes();
-    document.getElementById('attEditId').value='';
-    document.getElementById('attCancelEdit').style.display='none';
+    checkAndPopulateDateRecord();
     
     // Switch to Attendance tab
     const attTabBtn = document.querySelector('[data-tab="attendance"]');
     if (attTabBtn) attTabBtn.click();
-    
-    // Run live preview
-    attLivePreview();
     return;
   }
   
@@ -1832,6 +1968,11 @@ function init() {
   applyDefaultTimes();
   fillSettingsForm();
   renderAll();
+  
+  // Date change listener
+  document.getElementById('attDate').addEventListener('change', checkAndPopulateDateRecord);
+  document.getElementById('attDate').addEventListener('input', checkAndPopulateDateRecord);
+  checkAndPopulateDateRecord(); // run once initially
 }
 
 window.addEventListener('DOMContentLoaded', init);
