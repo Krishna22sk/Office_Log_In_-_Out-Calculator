@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Office In/Out Time Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F6F5F1;
+  --surface:#FFFFFF;
+  --surface-2:#EFEDE6;
+  --ink:#1E2A38;
+  --ink-soft:#5B6B7C;
+  --border:#E1DDD1;
+  --teal:#2F7A78;
+  --teal-dark:#245F5D;
+  --amber:#E2963A;
+  --red:#C0483D;
+  --green:#3F8F5F;
+  --shadow: 0 1px 2px rgba(30,42,56,.06), 0 8px 24px -12px rgba(30,42,56,.12);
+  --radius: 10px;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Space Grotesk', sans-serif;
+  --body: 'Inter', sans-serif;
+}
+[data-theme="dark"]{
+  --bg:#131A22;
+  --surface:#1B2530;
+  --surface-2:#212C38;
+  --ink:#ECEEF1;
+  --ink-soft:#93A2B2;
+  --border:#2A3542;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--body);
+  min-height:100vh;
+  transition:background .2s ease, color .2s ease;
+}
+h1,h2,h3,.brand,.stat-value{font-family:var(--display);}
+.mono{font-family:var(--mono);}
+
+/* ---------- Top bar (punch card motif) ---------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 24px;
+  background:var(--surface);
+  border-bottom:2px dashed var(--border);
+  position:sticky;top:0;z-index:50;
+}
+.brand{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:700;letter-spacing:.2px;}
+.brand .punch{
+  width:30px;height:30px;border-radius:50%;
+  background:conic-gradient(var(--teal) 0deg 270deg, var(--surface-2) 270deg 360deg);
+  border:2px solid var(--ink);
+  position:relative;flex:none;
+}
+.brand .punch::after{
+  content:'';position:absolute;top:50%;left:50%;width:2px;height:9px;background:var(--ink);
+  transform:translate(-50%,-100%) rotate(30deg);transform-origin:bottom;
+}
+.topbar-actions{display:flex;gap:10px;align-items:center;}
+.icon-btn{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+  border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;font-family:var(--body);font-weight:500;
+  display:flex;align-items:center;gap:6px;
+}
+.icon-btn:hover{border-color:var(--teal);}
+
+/* ---------- Tabs ---------- */
+.tabs{
+  display:flex;gap:2px;overflow-x:auto;background:var(--surface);
+  padding:0 24px;border-bottom:1px solid var(--border);position:sticky;top:61px;z-index:40;
+}
+.tab-btn{
+  border:none;background:none;color:var(--ink-soft);padding:12px 16px;font-size:13.5px;
+  font-family:var(--body);font-weight:600;cursor:pointer;white-space:nowrap;
+  border-bottom:2.5px solid transparent;letter-spacing:.2px;
+}
+.tab-btn.active{color:var(--teal-dark);border-bottom-color:var(--amber);}
+[data-theme="dark"] .tab-btn.active{color:#6FC7C3;}
+
+.container{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
+.panel{display:none;animation:fade .25s ease;}
+.panel.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+/* ---------- Cards / grid ---------- */
+.grid{display:grid;gap:16px;}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-2{grid-template-columns:repeat(2,1fr);}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:900px){.grid-4{grid-template-columns:repeat(2,1fr);} .grid-3{grid-template-columns:repeat(1,1fr);} .grid-2{grid-template-columns:1fr;}}
+@media(max-width:560px){.grid-4{grid-template-columns:1fr;}}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;box-shadow:var(--shadow);
+}
+.card h3{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);font-weight:600;}
+.stat-card{position:relative;overflow:hidden;}
+.stat-card .stat-value{font-size:26px;font-weight:700;margin-top:2px;}
+.stat-card .stat-label{font-size:12.5px;color:var(--ink-soft);font-weight:500;}
+.stat-card .tick{position:absolute;right:14px;top:14px;width:9px;height:9px;border-radius:50%;background:var(--teal);}
+
+form label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;margin-top:12px;}
+form label:first-child{margin-top:0;}
+input,select{
+  width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface-2);color:var(--ink);font-family:var(--mono);font-size:14px;
+}
+select{font-family:var(--body);}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:1px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:560px){.form-row{grid-template-columns:1fr;}}
+
+.btn{
+  border:none;border-radius:8px;padding:10px 18px;font-weight:600;font-size:13.5px;cursor:pointer;
+  font-family:var(--body);margin-top:16px;
+}
+.btn-primary{background:var(--teal);color:#fff;}
+.btn-primary:hover{background:var(--teal-dark);}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--ink);}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-sm{padding:6px 10px;font-size:12px;margin-top:0;}
+
+.result-strip{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;}
+.chip{
+  background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;font-size:12.5px;font-family:var(--mono);
+}
+.chip b{display:block;font-family:var(--display);font-size:15px;}
+.chip.late{border-color:var(--red);color:var(--red);}
+.chip.overtime{border-color:var(--green);color:var(--green);}
+.chip.early{border-color:var(--amber);color:var(--amber);}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);font-weight:600;}
+tr:hover td{background:var(--surface-2);}
+.badge{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge.late{background:rgba(192,72,61,.15);color:var(--red);}
+.badge.ot{background:rgba(63,143,95,.15);color:var(--green);}
+.badge.ontime{background:rgba(47,122,120,.15);color:var(--teal-dark);}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px;}
+.toolbar .field{flex:1;min-width:140px;}
+.toolbar label{margin-top:0;}
+
+.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-title h2{margin:0;font-size:20px;}
+.section-title p{margin:2px 0 0;color:var(--ink-soft);font-size:13px;}
+
+.leave-type-pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11.5px;font-weight:600;}
+.lt-Casual{background:#DCEEEC;color:#1E5F5D;}
+.lt-Sick{background:#F7E1DE;color:#9C3B2F;}
+.lt-Half{background:#FBE9CC;color:#95611A;}
+.lt-WFH{background:#E1E7F2;color:#33528C;}
+.lt-LOP{background:#EEE0E7;color:#7C3555;}
+[data-theme="dark"] .lt-Casual{background:#173634;} [data-theme="dark"] .lt-Sick{background:#3B211D;}
+[data-theme="dark"] .lt-Half{background:#3B2E14;} [data-theme="dark"] .lt-WFH{background:#1F273D;} [data-theme="dark"] .lt-LOP{background:#331F2A;}
+
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px;}
+.cal-head{font-size:11px;text-align:center;color:var(--ink-soft);font-weight:700;}
+.cal-cell{
+  aspect-ratio:1/.8;border-radius:8px;border:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;
+  background:var(--surface-2);gap:2px;
+  cursor:pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.cal-cell:hover{
+  border-color:var(--teal);
+  background:var(--surface);
+}
+.cal-cell .d{font-family:var(--mono);font-weight:600;}
+.cal-cell.present{border-color:var(--teal);}
+.cal-cell.leave{border-color:var(--red);background:rgba(192,72,61,.08);}
+.cal-cell.empty{visibility:hidden;}
+.dot{width:6px;height:6px;border-radius:50%;}
+.dot.present{background:var(--teal);}
+.dot.leave{background:var(--red);}
+.dot.perm{background:var(--amber);}
+
+canvas{max-height:280px;}
+.chart-wrap{margin-top:10px;}
+
+.empty-state{text-align:center;padding:40px 10px;color:var(--ink-soft);font-size:13.5px;}
+.empty-state .glyph{font-size:26px;display:block;margin-bottom:8px;}
+
+/* ---------- Time dropdown group styling ---------- */
+.time-select-group {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+  align-items: center;
+}
+.time-select-group select {
+  flex: 1;
+  font-family: var(--body);
+  font-size: 13.5px;
+  padding: 8px 10px;
+}
+
+/* ---------- Clock Picker Modal Styling ---------- */
+.clock-modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.clock-modal.active {
+  display: flex;
+}
+.clock-picker-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 270px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  animation: modalFade 0.2s ease;
+}
+@keyframes modalFade {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.clock-header {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+.clock-header .time-part {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--ink-soft);
+}
+.clock-header .time-part.active {
+  color: var(--teal);
+  background: var(--surface-2);
+}
+.clock-header .ampm-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-family: var(--body);
+  margin-left: 10px;
+}
+.clock-header .ampm-toggle span {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  text-align: center;
+}
+.clock-header .ampm-toggle span.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal);
+}
+
+.clock-face {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  background: var(--surface-2);
+  border-radius: 50%;
+  margin-bottom: 20px;
+}
+.clock-hand {
+  position: absolute;
+  bottom: 50%;
+  left: 50%;
+  width: 2px;
+  height: 70px;
+  background: var(--teal);
+  transform-origin: bottom center;
+  transform: translate(-50%, 0) rotate(0deg);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.clock-hand::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+.clock-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  transform: translate(-50%, -50%);
+}
+.clock-numbers-container {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0; left: 0;
+}
+.clock-number {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ink);
+  transition: background 0.15s, color 0.15s;
+}
+.clock-number:hover {
+  background: var(--border);
+}
+.clock-number.selected {
+  background: var(--teal);
+  color: #fff;
+}
+.clock-buttons {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+@media print{
+  .topbar,.tabs,.no-print{display:none !important;}
+  body{background:#fff;}
+  .panel{display:none !important;}
+  .panel.print-target{display:block !important;}
+}
+::-webkit-scrollbar{height:6px;width:6px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
+</style>
+</head>
+<body>
+
+<div class="topbar no-print">
+  <div class="brand"><span class="punch"></span>Office In/Out Time Calculator</div>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="themeToggle">🌙 Dark</button>
+  </div>
+</div>
+
+<div class="tabs no-print" id="tabs">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="attendance">Attendance</button>
+  <button class="tab-btn" data-tab="permission">Permission</button>
+  <button class="tab-btn" data-tab="leave">Leave</button>
+  <button class="tab-btn" data-tab="history">History</button>
+  <button class="tab-btn" data-tab="reports">Reports</button>
+  <button class="tab-btn" data-tab="calendar">Calendar</button>
+  <button class="tab-btn" data-tab="settings">Settings</button>
+</div>
+
+<div class="container">
+
+  <!-- ============ DASHBOARD ============ -->
+  <div class="panel active print-target" id="panel-dashboard">
+    <div class="section-title"><div><h2>Dashboard</h2><p id="todayDateLabel"></p></div></div>
+    <div class="grid grid-4" id="dashboardCards"></div>
+
+    <div class="grid grid-2" style="margin-top:18px;">
+      <div class="card">
+        <h3 style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Monthly Summary — <span id="dashMonthLabel"></span></span>
+          <span class="no-print" style="display:flex; gap:6px;">
+            <button class="icon-btn" id="dashPrevMonth" style="padding: 4px 8px; font-size:12px;" type="button">← Prev</button>
+            <button class="icon-btn" id="dashNextMonth" style="padding: 4px 8px; font-size:12px;" type="button">Next →</button>
+          </span>
+        </h3>
+        <div id="monthlySummaryTable"></div>
+      </div>
+      <div class="card">
+        <h3>Attendance Calendar</h3>
+        <div class="calendar" id="dashCalendar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ATTENDANCE ============ -->
+  <div class="panel" id="panel-attendance">
+    <div class="section-title"><div><h2>Daily Attendance</h2><p>Log in/out time and see working hours instantly.</p></div></div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>Punch Entry</h3>
+        <form id="attendanceForm">
+          <input type="hidden" id="attEditId">
+          <label for="attDate">Date</label>
+          <input type="date" id="attDate" required>
+          
+          <div class="form-row">
+            <div>
+              <label>In Time</label>
+              <div class="time-select-group" id="attInGroup">
+                <select class="sel-hr" required></select>
+                <select class="sel-min" required></select>
+                <select class="sel-ampm" required>
+                  <option value="AM" selected>AM</option>
+                  <option value="PM">PM</option>
+                </select>
+                <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
+              </div>
+            </div>
+            <div>
+              <label>Out Time</label>
+              <div class="time-select-group" id="attOutGroup">
+                <select class="sel-hr" required></select>
+                <select class="sel-min" required></select>
+                <select class="sel-ampm" required>
+                  <option value="AM">AM</option>
+                  <option value="PM" selected>PM</option>
+                </select>
+                <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="result-strip" id="attLive"></div>
+          <button class="btn btn-primary" type="submit">Save Attendance</button>
+          <button class="btn btn-outline" type="button" id="attCancelEdit" style="display:none;">Cancel edit</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Office Timing Reference</h3>
+        <p style="color:var(--ink-soft);font-size:13px;">Configured in Settings.</p>
+        <div class="result-strip" id="officeRefChips"></div>
+        <h3 style="margin-top:20px;">Recent Entries</h3>
+        <div id="recentAttendance"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PERMISSION ============ -->
+  <div class="panel" id="panel-permission">
+    <div class="section-title"><div><h2>Permission Calculator</h2><p>Track short outings during office hours.</p></div></div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>New Permission</h3>
+        <form id="permissionForm">
+          <input type="hidden" id="permEditId">
+          <label for="permDate">Date</label>
+          <input type="date" id="permDate" required>
+          
+          <div class="form-row">
+            <div>
+              <label>Permission Out Time</label>
+              <div class="time-select-group" id="permOutGroup">
+                <select class="sel-hr" required></select>
+                <select class="sel-min" required></select>
+                <select class="sel-ampm" required>
+                  <option value="AM">AM</option>
+                  <option value="PM" selected>PM</option>
+                </select>
+                <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
+              </div>
+            </div>
+            <div>
+              <label>Permission In Time</label>
+              <div class="time-select-group" id="permInGroup">
+                <select class="sel-hr" required></select>
+                <select class="sel-min" required></select>
+                <select class="sel-ampm" required>
+                  <option value="AM">AM</option>
+                  <option value="PM" selected>PM</option>
+                </select>
+                <button type="button" class="icon-btn btn-clock-picker" style="margin-top:0; padding:6px 8px;" title="Open Clock Picker">🕒</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="result-strip" id="permLive"></div>
+          <button class="btn btn-primary" type="submit">Save Permission</button>
+          <button class="btn btn-outline" type="button" id="permCancelEdit" style="display:none;">Cancel edit</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>This Month</h3>
+        <div class="result-strip" id="permStats"></div>
+        <h3 style="margin-top:20px;">Permission History</h3>
+        <div id="permissionHistory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ LEAVE ============ -->
+  <div class="panel" id="panel-leave">
+    <div class="section-title"><div><h2>Leave Calculator</h2><p>Plan and track leave usage across the month.</p></div></div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>New Leave</h3>
+        <form id="leaveForm">
+          <input type="hidden" id="leaveEditId">
+          <label for="leaveType">Leave Type</label>
+          <select id="leaveType">
+            <option value="Casual">Casual Leave</option>
+            <option value="Sick">Sick Leave</option>
+            <option value="Half">Half Day</option>
+            <option value="WFH">Work From Home</option>
+            <option value="LOP">Loss of Pay</option>
+          </select>
+          <div class="form-row">
+            <div><label for="leaveStart">Start Date</label><input type="date" id="leaveStart" required></div>
+            <div><label for="leaveEnd">End Date</label><input type="date" id="leaveEnd" required></div>
+          </div>
+          <div class="result-strip" id="leaveLive"></div>
+          <button class="btn btn-primary" type="submit">Save Leave</button>
+          <button class="btn btn-outline" type="button" id="leaveCancelEdit" style="display:none;">Cancel edit</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Monthly Leave Summary</h3>
+        <div id="leaveSummary"></div>
+        <h3 style="margin-top:20px;">Leave History</h3>
+        <div id="leaveHistory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HISTORY ============ -->
+  <div class="panel" id="panel-history">
+    <div class="section-title"><div><h2>History</h2><p>Search, filter, edit, delete and export all records.</p></div></div>
+    <div class="card">
+      <div class="toolbar">
+        <div class="field"><label>Search date</label><input type="date" id="histSearchDate"></div>
+        <div class="field"><label>Month</label><select id="histMonth"></select></div>
+        <div class="field"><label>Year</label><select id="histYear"></select></div>
+        <div class="field"><label>Type</label>
+          <select id="histType">
+            <option value="all">All</option>
+            <option value="attendance">Attendance</option>
+            <option value="permission">Permission</option>
+            <option value="leave">Leave</option>
+          </select>
+        </div>
+        <button class="btn btn-outline" id="histClear" style="margin-top:0;">Clear filters</button>
+      </div>
+      <div class="result-strip no-print">
+        <button class="btn btn-primary" id="exportXLSX" style="margin-top:0;">📊 Download Excel Sheet</button>
+        <button class="icon-btn" id="exportCSV">Export CSV</button>
+        <button class="icon-btn" id="exportPDF">Export PDF</button>
+        <button class="icon-btn" id="printSheet">🖨 Print Monthly Sheet</button>
+      </div>
+      <div id="historyTable" style="margin-top:14px;"></div>
+    </div>
+  </div>
+
+  <!-- ============ REPORTS ============ -->
+  <div class="panel" id="panel-reports">
+    <div class="section-title"><div><h2>Reports</h2><p>Daily, weekly, monthly and yearly insight.</p></div></div>
+    <div class="toolbar">
+      <div class="field"><label>Report Type</label>
+        <select id="reportRange">
+          <option value="week">Weekly (last 7 entries)</option>
+          <option value="month" selected>Monthly</option>
+          <option value="year">Yearly</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card"><h3>Working Hours</h3><div class="chart-wrap"><canvas id="chartWorking"></canvas></div></div>
+      <div class="card"><h3>Permission Hours</h3><div class="chart-wrap"><canvas id="chartPermission"></canvas></div></div>
+      <div class="card"><h3>Leave Summary</h3><div class="chart-wrap"><canvas id="chartLeave"></canvas></div></div>
+      <div class="card"><h3>Attendance Percentage</h3><div class="chart-wrap"><canvas id="chartAttendance"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- ============ CALENDAR ============ -->
+  <div class="panel" id="panel-calendar">
+    <div class="section-title">
+      <div><h2>Calendar View</h2><p id="calMonthLabel"></p></div>
+      <div class="no-print">
+        <button class="icon-btn" id="calPrev">← Prev</button>
+        <button class="icon-btn" id="calNext">Next →</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="calendar" id="fullCalendar"></div>
+      <div class="result-strip" style="margin-top:16px;">
+        <span class="chip"><span class="dot present" style="display:inline-block;margin-right:5px;"></span>Present</span>
+        <span class="chip"><span class="dot leave" style="display:inline-block;margin-right:5px;"></span>Leave</span>
+        <span class="chip"><span class="dot perm" style="display:inline-block;margin-right:5px;"></span>Permission taken</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="panel" id="panel-settings">
+    <div class="section-title"><div><h2>Settings</h2><p>Office timing reference & app preferences.</p></div></div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>Official Office Timing</h3>
+        <form id="settingsForm">
+          <div class="form-row">
+            <div><label for="setStart">Office Start</label><input type="time" id="setStart"></div>
+            <div><label for="setEnd">Office End</label><input type="time" id="setEnd"></div>
+          </div>
+          <label for="setStdBreak">Standard Break Allowance (minutes)</label>
+          <input type="number" id="setStdBreak" min="0">
+          <button class="btn btn-primary" type="submit">Save Settings</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Data Management</h3>
+        <p style="color:var(--ink-soft);font-size:13px;">All data is stored locally in this browser (localStorage).</p>
+        <button class="btn btn-danger" id="wipeData">🗑 Erase all data</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CLOCK PICKER MODAL ============ -->
+<div class="clock-modal" id="clockPickerModal">
+  <div class="clock-picker-card">
+    <div class="clock-header">
+      <span class="time-part active" id="lblPickerHour">9</span>
+      <span>:</span>
+      <span class="time-part" id="lblPickerMinute">30</span>
+      <div class="ampm-toggle">
+        <span id="btnPickerAM" class="active">AM</span>
+        <span id="btnPickerPM">PM</span>
+      </div>
+    </div>
+    <div class="clock-face">
+      <div class="clock-center"></div>
+      <div class="clock-hand" id="clockHand"></div>
+      <div class="clock-numbers-container" id="clockNumbersContainer"></div>
+    </div>
+    <div class="clock-buttons">
+      <button type="button" class="btn btn-outline btn-sm" id="btnPickerCancel" style="margin-top:0;">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btnPickerOK" style="margin-top:0;">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   STORAGE
+========================================================= */
+const DB_KEY = 'oitc_data_v1';
+function loadDB(){
+  const raw = localStorage.getItem(DB_KEY);
+  if(raw){ try{ return JSON.parse(raw); }catch(e){} }
+  return { attendance:[], permissions:[], leaves:[], settings:{ officeStart:'09:30', officeEnd:'19:30', stdBreak:60, theme:'light' } };
+}
+function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(DB)); }
+let DB = loadDB();
+
+/* =========================================================
+   HELPERS
+========================================================= */
+const pad = n => String(n).padStart(2,'0');
+const leaveLabel = {
+  Casual: 'Casual Leave',
+  Sick: 'Sick Leave',
+  Half: 'Half Day',
+  WFH: 'Work From Home',
+  LOP: 'Loss of Pay'
+};
+const leaveClass = {
+  Casual: 'lt-Casual',
+  Sick: 'lt-Sick',
+  Half: 'lt-Half',
+  WFH: 'lt-WFH',
+  LOP: 'lt-LOP'
+};
+function toMinutes(t){ if(!t) return 0; const [h,m]=t.split(':').map(Number); return h*60+m; }
+function isSunday(dateStr){
+  if(!dateStr) return false;
+  return new Date(dateStr + 'T00:00:00').getDay() === 0;
+}
+function to12Hr(t){
+  if(!t) return '';
+  const [hStr,mStr]=t.split(':');
+  let h=parseInt(hStr);
+  const ampm = h>=12 ? 'PM':'AM';
+  if(h>12) h -= 12;
+  if(h===0) h = 12;
+  return `${String(h).padStart(2,'0')}:${mStr} ${ampm}`;
+}
+function minsToHM(mins){
+  mins = Math.round(mins);
+  const sign = mins<0 ? '-':'';
+  mins = Math.abs(mins);
+  const h = Math.floor(mins/60), m = mins%60;
+  return `${sign}${h}h ${pad(m)}m`;
+}
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function fmtDate(str){
+  if(!str) return '';
+  const d = new Date(str+'T00:00:00');
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function monthKey(dateStr){ return dateStr.slice(0,7); }
+function daysBetween(a,b){
+  const d1=new Date(a+'T00:00:00'), d2=new Date(b+'T00:00:00');
+  return Math.round((d2-d1)/86400000)+1;
+}
+
+/* Working-hours calc for a single attendance record */
+function computeAttendance(rec, settings){
+  let inM = toMinutes(rec.inTime), outM = toMinutes(rec.outTime);
+  if(outM < inM) outM += 24*60; // overnight guard
+  const totalM = outM - inM;
+  const breakM = Number(rec.breakMinutes)||0;
+  const netM = Math.max(0, totalM - breakM);
+  
+  if (isSunday(rec.date)) {
+    return {totalM, breakM, netM, lateM: 0, earlyM: 0, overtimeM: netM, extraM: netM};
+  }
+  
+  const offStart = toMinutes(settings.officeStart), offEnd = toMinutes(settings.officeEnd);
+  const lateM = Math.max(0, inM - offStart);
+  const earlyM = Math.max(0, offEnd - outM);
+  const overtimeM = Math.max(0, outM - offEnd);
+  const stdShiftM = Math.max(0, (offEnd-offStart) - (Number(settings.stdBreak)||0));
+  const extraM = Math.max(0, netM - stdShiftM);
+  return {totalM, breakM, netM, lateM, earlyM, overtimeM, extraM};
+}
+function computePermission(rec){
+  let outM = toMinutes(rec.permOut), inM = toMinutes(rec.permIn);
+  const durM = Math.max(0, inM - outM);
+  return durM;
+}
+function computeLeaveDays(rec){
+  const n = daysBetween(rec.start, rec.end);
+  return rec.type==='Half' ? n*0.5 : n;
+}
+
+/* Helper to get and set values in select groups */
+function getTimeFromGroup(groupId) {
+  const container = document.getElementById(groupId);
+  const hr = container.querySelector('.sel-hr').value;
+  const min = container.querySelector('.sel-min').value;
+  const ampm = container.querySelector('.sel-ampm').value;
+  if (!hr || !min || !ampm) return '';
+  let h = parseInt(hr);
+  if (ampm === 'PM' && h < 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${pad(h)}:${pad(min)}`;
+}
+function setTimeInGroup(groupId, timeStr) {
+  const container = document.getElementById(groupId);
+  if (!timeStr) {
+    container.querySelector('.sel-hr').value = '';
+    container.querySelector('.sel-min').value = '';
+    // Out time defaults to PM, In time defaults to AM
+    container.querySelector('.sel-ampm').value = groupId.includes('Out') ? 'PM' : 'AM';
+    return;
+  }
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr);
+  let ampm = 'AM';
+  if (h >= 12) {
+    ampm = 'PM';
+    if (h > 12) h -= 12;
+  }
+  if (h === 0) h = 12;
+  container.querySelector('.sel-hr').value = String(h);
+  container.querySelector('.sel-min').value = mStr;
+  container.querySelector('.sel-ampm').value = ampm;
+}
+
+function populateTimeDropdowns() {
+  document.querySelectorAll('.time-select-group').forEach(group => {
+    const hrSelect = group.querySelector('.sel-hr');
+    const minSelect = group.querySelector('.sel-min');
+    
+    let hrHtml = '<option value="">Hr</option>';
+    for (let h = 1; h <= 12; h++) {
+      hrHtml += `<option value="${h}">${h}</option>`;
+    }
+    hrSelect.innerHTML = hrHtml;
+    
+    let minHtml = '<option value="">Min</option>';
+    for (let m = 0; m < 60; m++) {
+      minHtml += `<option value="${pad(m)}">${pad(m)}</option>`;
+    }
+    minSelect.innerHTML = minHtml;
+  });
+}
+
+function applyDefaultTimes() {
+  setTimeInGroup('attInGroup', DB.settings.officeStart);
+  setTimeInGroup('attOutGroup', DB.settings.officeEnd);
+  setTimeInGroup('permOutGroup', '');
+  setTimeInGroup('permInGroup', '');
+}
+
+/* =========================================================
+   CLOCK PICKER POPUP LOGIC
+========================================================= */
+let currentPickerMode = 'hours'; // 'hours' or 'minutes'
+let selectedPickerHour = 9;
+let selectedPickerMinute = 30;
+let selectedPickerAmpm = 'AM';
+let activeTargetGroupId = '';
+
+function openClockPicker(groupId) {
+  activeTargetGroupId = groupId;
+  const timeVal = getTimeFromGroup(groupId);
+  
+  if (timeVal) {
+    const [hStr, mStr] = timeVal.split(':');
+    let h = parseInt(hStr);
+    selectedPickerAmpm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    selectedPickerHour = h;
+    selectedPickerMinute = parseInt(mStr);
+  } else {
+    // Default to settings values or 12 PM/AM
+    const defaultTime = groupId.includes('In') ? DB.settings.officeStart : DB.settings.officeEnd;
+    const [hStr, mStr] = defaultTime.split(':');
+    let h = parseInt(hStr);
+    selectedPickerAmpm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    selectedPickerHour = h;
+    selectedPickerMinute = parseInt(mStr);
+  }
+  
+  currentPickerMode = 'hours';
+  updateClockHeaderUI();
+  renderClockNumbers('hours', selectedPickerHour);
+  document.getElementById('clockPickerModal').classList.add('active');
+}
+
+function updateClockHeaderUI() {
+  document.getElementById('lblPickerHour').textContent = selectedPickerHour;
+  document.getElementById('lblPickerMinute').textContent = pad(selectedPickerMinute);
+  
+  document.getElementById('lblPickerHour').className = 'time-part' + (currentPickerMode === 'hours' ? ' active' : '');
+  document.getElementById('lblPickerMinute').className = 'time-part' + (currentPickerMode === 'minutes' ? ' active' : '');
+  
+  document.getElementById('btnPickerAM').className = selectedPickerAmpm === 'AM' ? 'active' : '';
+  document.getElementById('btnPickerPM').className = selectedPickerAmpm === 'PM' ? 'active' : '';
+}
+
+function renderClockNumbers(mode, selectedValue) {
+  const container = document.getElementById('clockNumbersContainer');
+  container.innerHTML = '';
+  
+  const numbers = mode === 'hours' 
+    ? [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+    
+  const radius = 72; // px from center
+  const center = 100; // px
+  
+  numbers.forEach((num, index) => {
+    const angle = (index * 30 - 90) * (Math.PI / 180);
+    const x = center + Math.cos(angle) * radius;
+    const y = center + Math.sin(angle) * radius;
+    
+    const div = document.createElement('div');
+    div.className = 'clock-number';
+    div.style.left = `${x}px`;
+    div.style.top = `${y}px`;
+    
+    const displayVal = mode === 'hours' ? String(num) : pad(num);
+    div.textContent = displayVal;
+    
+    const isSelected = mode === 'hours' 
+      ? parseInt(selectedValue) === num 
+      : Math.round(parseInt(selectedValue) / 5) * 5 % 60 === num;
+      
+    if (isSelected) {
+      div.classList.add('selected');
+      const degrees = index * 30;
+      document.getElementById('clockHand').style.transform = `translate(-50%, 0) rotate(${degrees}deg)`;
+    }
+    
+    div.addEventListener('click', () => {
+      selectClockNumber(mode, num, index * 30);
+    });
+    
+    container.appendChild(div);
+  });
+}
+
+function selectClockNumber(mode, val, degrees) {
+  document.getElementById('clockHand').style.transform = `translate(-50%, 0) rotate(${degrees}deg)`;
+  
+  if (mode === 'hours') {
+    selectedPickerHour = val;
+    currentPickerMode = 'minutes';
+    setTimeout(() => {
+      updateClockHeaderUI();
+      const nearest5 = Math.round(selectedPickerMinute / 5) * 5 % 60;
+      renderClockNumbers('minutes', nearest5);
+    }, 180);
+  } else {
+    selectedPickerMinute = val;
+    updateClockHeaderUI();
+    renderClockNumbers('minutes', val);
+  }
+}
+
+document.getElementById('lblPickerHour').addEventListener('click', () => {
+  currentPickerMode = 'hours';
+  updateClockHeaderUI();
+  renderClockNumbers('hours', selectedPickerHour);
+});
+document.getElementById('lblPickerMinute').addEventListener('click', () => {
+  currentPickerMode = 'minutes';
+  updateClockHeaderUI();
+  const nearest5 = Math.round(selectedPickerMinute / 5) * 5 % 60;
+  renderClockNumbers('minutes', nearest5);
+});
+document.getElementById('btnPickerAM').addEventListener('click', () => {
+  selectedPickerAmpm = 'AM';
+  updateClockHeaderUI();
+});
+document.getElementById('btnPickerPM').addEventListener('click', () => {
+  selectedPickerAmpm = 'PM';
+  updateClockHeaderUI();
+});
+
+document.getElementById('btnPickerCancel').addEventListener('click', () => {
+  document.getElementById('clockPickerModal').classList.remove('active');
+});
+
+document.getElementById('btnPickerOK').addEventListener('click', () => {
+  const container = document.getElementById(activeTargetGroupId);
+  container.querySelector('.sel-hr').value = selectedPickerHour;
+  container.querySelector('.sel-min').value = pad(selectedPickerMinute);
+  container.querySelector('.sel-ampm').value = selectedPickerAmpm;
+  
+  document.getElementById('clockPickerModal').classList.remove('active');
+  
+  if (activeTargetGroupId.includes('att')) attLivePreview();
+  else if (activeTargetGroupId.includes('perm')) permLivePreview();
+});
+
+/* =========================================================
+   TABS
+========================================================= */
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  const panel = document.getElementById('panel-'+btn.dataset.tab);
+  panel.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('print-target'));
+  panel.classList.add('print-target');
+  if(btn.dataset.tab==='reports') renderCharts();
+  if(btn.dataset.tab==='calendar') renderFullCalendar();
+});
+
+/* =========================================================
+   THEME
+========================================================= */
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', DB.settings.theme);
+  document.getElementById('themeToggle').textContent = DB.settings.theme==='dark' ? '☀ Light' : '🌙 Dark';
+}
+document.getElementById('themeToggle').addEventListener('click', ()=>{
+  DB.settings.theme = DB.settings.theme==='dark' ? 'light':'dark';
+  saveDB(); applyTheme(); renderCharts(true);
+});
+
+/* =========================================================
+   WIPE DATA
+========================================================= */
+document.getElementById('wipeData').addEventListener('click', ()=>{
+  if(confirm('This will permanently erase all attendance, permission and leave data. Continue?')){
+    localStorage.removeItem(DB_KEY); location.reload();
+  }
+});
+
+/* =========================================================
+   SETTINGS FORM
+========================================================= */
+function fillSettingsForm(){
+  document.getElementById('setStart').value = DB.settings.officeStart;
+  document.getElementById('setEnd').value = DB.settings.officeEnd;
+  document.getElementById('setStdBreak').value = DB.settings.stdBreak;
+}
+document.getElementById('settingsForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  DB.settings.officeStart = document.getElementById('setStart').value || '09:30';
+  DB.settings.officeEnd = document.getElementById('setEnd').value || '19:30';
+  DB.settings.stdBreak = Number(document.getElementById('setStdBreak').value)||60;
+  saveDB(); renderAll();
+  alert('Settings saved.');
+});
+
+/* =========================================================
+   ATTENDANCE FORM + LIVE CALC
+========================================================= */
+const attForm = document.getElementById('attendanceForm');
+document.getElementById('attDate').value = todayStr();
+function attLivePreview(){
+  const rec = {
+    inTime: getTimeFromGroup('attInGroup'),
+    outTime: getTimeFromGroup('attOutGroup'),
+    breakMinutes: 60
+  };
+  const box = document.getElementById('attLive');
+  if(!rec.inTime || !rec.outTime){ box.innerHTML=''; return; }
+  const c = computeAttendance(rec, DB.settings);
+  box.innerHTML = `
+    <div class="chip">Total Working<b>${minsToHM(c.totalM)}</b></div>
+    <div class="chip">Net Working<b>${minsToHM(c.netM)}</b></div>
+    ${c.lateM>0 ? `<div class="chip late">Late Arrival<b>${minsToHM(c.lateM)}</b></div>`:''}
+    ${c.earlyM>0 ? `<div class="chip early">Early Leave<b>${minsToHM(c.earlyM)}</b></div>`:''}
+    ${c.overtimeM>0 ? `<div class="chip overtime">Overtime<b>${minsToHM(c.overtimeM)}</b></div>`:''}
+  `;
+}
+document.getElementById('attInGroup').addEventListener('change', attLivePreview);
+document.getElementById('attOutGroup').addEventListener('change', attLivePreview);
+
+attForm.addEventListener('submit', e=>{
+  e.preventDefault();
+  const editId = document.getElementById('attEditId').value;
+  const rec = {
+    id: editId || uid(),
+    date: document.getElementById('attDate').value,
+    inTime: getTimeFromGroup('attInGroup'),
+    outTime: getTimeFromGroup('attOutGroup'),
+    breakMinutes: 60
+  };
+  if(editId){
+    const idx = DB.attendance.findIndex(r=>r.id===editId);
+    if(idx>-1) DB.attendance[idx]=rec;
+  } else {
+    DB.attendance = DB.attendance.filter(r=>r.date!==rec.date);
+    DB.attendance.push(rec);
+  }
+  saveDB();
+  attForm.reset();
+  applyDefaultTimes();
+  document.getElementById('attEditId').value='';
+  document.getElementById('attCancelEdit').style.display='none';
+  document.getElementById('attLive').innerHTML='';
+  renderAll();
+});
+document.getElementById('attCancelEdit').addEventListener('click', ()=>{
+  attForm.reset();
+  applyDefaultTimes();
+  document.getElementById('attEditId').value='';
+  document.getElementById('attCancelEdit').style.display='none';
+  attLivePreview();
+});
+
+/* =========================================================
+   PERMISSION FORM + LIVE CALC
+========================================================= */
+const permForm = document.getElementById('permissionForm');
+document.getElementById('permDate').value = todayStr();
+function permLivePreview(){
+  const outT = getTimeFromGroup('permOutGroup'), inT = getTimeFromGroup('permInGroup');
+  const box = document.getElementById('permLive');
+  if(!outT||!inT){ box.innerHTML=''; return; }
+  const durM = computePermission({permOut:outT, permIn:inT});
+  box.innerHTML = `<div class="chip">Duration<b>${minsToHM(durM)}</b></div>`;
+}
+document.getElementById('permOutGroup').addEventListener('change', permLivePreview);
+document.getElementById('permInGroup').addEventListener('change', permLivePreview);
+
+permForm.addEventListener('submit', e=>{
+  e.preventDefault();
+  const editId = document.getElementById('permEditId').value;
+  const rec = {
+    id: editId || uid(),
+    date: document.getElementById('permDate').value,
+    permOut: getTimeFromGroup('permOutGroup'),
+    permIn: getTimeFromGroup('permInGroup')
+  };
+  if(editId){
+    const idx = DB.permissions.findIndex(r=>r.id===editId);
+    if(idx>-1) DB.permissions[idx]=rec;
+  } else DB.permissions.push(rec);
+  saveDB();
+  permForm.reset();
+  applyDefaultTimes();
+  document.getElementById('permEditId').value='';
+  document.getElementById('permCancelEdit').style.display='none';
+  document.getElementById('permLive').innerHTML='';
+  renderAll();
+});
+document.getElementById('permCancelEdit').addEventListener('click', ()=>{
+  permForm.reset();
+  applyDefaultTimes();
+  document.getElementById('permEditId').value='';
+  document.getElementById('permCancelEdit').style.display='none';
+  permLivePreview();
+});
+
+/* =========================================================
+   LEAVE FORM + LIVE CALC
+========================================================= */
+const leaveForm = document.getElementById('leaveForm');
+document.getElementById('leaveStart').value = todayStr();
+document.getElementById('leaveEnd').value = todayStr();
+function leaveLivePreview(){
+  const type=document.getElementById('leaveType').value, s=document.getElementById('leaveStart').value, en=document.getElementById('leaveEnd').value;
+  const box = document.getElementById('leaveLive');
+  if(!s||!en || en<s){ box.innerHTML=''; return; }
+  const days = computeLeaveDays({type,start:s,end:en});
+  box.innerHTML = `<div class="chip">Total Leave Days<b>${days}</b></div>`;
+}
+['leaveType','leaveStart','leaveEnd'].forEach(id=>document.getElementById(id).addEventListener('input', leaveLivePreview));
+leaveForm.addEventListener('submit', e=>{
+  e.preventDefault();
+  const editId = document.getElementById('leaveEditId').value;
+  const s = document.getElementById('leaveStart').value, en = document.getElementById('leaveEnd').value;
+  if(en < s){ alert('End date must be after start date.'); return; }
+  const rec = { id: editId||uid(), type: document.getElementById('leaveType').value, start:s, end:en };
+  if(editId){
+    const idx = DB.leaves.findIndex(r=>r.id===editId);
+    if(idx>-1) DB.leaves[idx]=rec;
+  } else DB.leaves.push(rec);
+  saveDB();
+  leaveForm.reset(); document.getElementById('leaveStart').value=todayStr(); document.getElementById('leaveEnd').value=todayStr();
+  document.getElementById('leaveEditId').value=''; document.getElementById('leaveCancelEdit').style.display='none';
+  document.getElementById('leaveLive').innerHTML='';
+  renderAll();
+});
+document.getElementById('leaveCancelEdit').addEventListener('click', ()=>{
+  leaveForm.reset(); document.getElementById('leaveStart').value=todayStr(); document.getElementById('leaveEnd').value=todayStr();
+  document.getElementById('leaveEditId').value=''; document.getElementById('leaveCancelEdit').style.display='none';
+});
+
+/* =========================================================
+   EDIT / DELETE Core Logic
+========================================================= */
+function editAttendance(id){
+  const r = DB.attendance.find(x=>x.id===id); if(!r) return;
+  document.querySelector('[data-tab="attendance"]').click();
+  document.getElementById('attEditId').value=r.id;
+  document.getElementById('attDate').value=r.date;
+  setTimeInGroup('attInGroup', r.inTime);
+  setTimeInGroup('attOutGroup', r.outTime);
+  document.getElementById('attCancelEdit').style.display='inline-block';
+  attLivePreview();
+}
+function deleteAttendance(id){ if(confirm('Delete this attendance record?')){ DB.attendance=DB.attendance.filter(x=>x.id!==id); saveDB(); renderAll(); } }
+function editPermission(id){
+  const r = DB.permissions.find(x=>x.id===id); if(!r) return;
+  document.querySelector('[data-tab="permission"]').click();
+  document.getElementById('permEditId').value=r.id;
+  document.getElementById('permDate').value=r.date;
+  setTimeInGroup('permOutGroup', r.permOut);
+  setTimeInGroup('permInGroup', r.permIn);
+  document.getElementById('permCancelEdit').style.display='inline-block';
+  permLivePreview();
+}
+function deletePermission(id){ if(confirm('Delete this permission record?')){ DB.permissions=DB.permissions.filter(x=>x.id!==id); saveDB(); renderAll(); } }
+function editLeave(id){
+  const r = DB.leaves.find(x=>x.id===id); if(!r) return;
+  document.querySelector('[data-tab="leave"]').click();
+  document.getElementById('leaveEditId').value=r.id;
+  document.getElementById('leaveType').value=r.type;
+  document.getElementById('leaveStart').value=r.start;
+  document.getElementById('leaveEnd').value=r.end;
+  document.getElementById('leaveCancelEdit').style.display='inline-block';
+  leaveLivePreview();
+}
+function deleteLeave(id){ if(confirm('Delete this leave record?')){ DB.leaves=DB.leaves.filter(x=>x.id!==id); saveDB(); renderAll(); } }
+
+/* =========================================================
+   RENDER: Attendance list / Permission list / Leave list
+========================================================= */
+function renderRecentAttendance(){
+  const rows = [...DB.attendance].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+  const el = document.getElementById('recentAttendance');
+  if(!rows.length){ el.innerHTML = emptyState('No attendance logged yet.'); return; }
+  el.innerHTML = `<table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>{
+    const c = computeAttendance(r, DB.settings);
+    let badge = '<span class="badge ontime">On time</span>';
+    if(c.lateM>0) badge = '<span class="badge late">Late</span>';
+    if(c.overtimeM>0) badge += ' <span class="badge ot">OT</span>';
+    return `<tr><td class="mono">${fmtDate(r.date)}</td><td class="mono">${to12Hr(r.inTime)}</td><td class="mono">${to12Hr(r.outTime)}</td><td class="mono">${minsToHM(c.netM)}</td><td>${badge}</td>
+    <td><button class="btn btn-outline btn-sm btn-edit" data-id="${r.id}" data-type="attendance">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.id}" data-type="attendance">Del</button></td></tr>`;
+  }).join('')}
+  </tbody></table>`;
+}
+function renderPermissionHistory(){
+  const rows = [...DB.permissions].sort((a,b)=>b.date.localeCompare(a.date));
+  const el = document.getElementById('permissionHistory');
+  if(!rows.length){ el.innerHTML = emptyState('No permissions recorded yet.'); return; }
+  el.innerHTML = `<table><thead><tr><th>Date</th><th>Out</th><th>In</th><th>Duration</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="mono">${fmtDate(r.date)}</td><td class="mono">${to12Hr(r.permOut)}</td><td class="mono">${to12Hr(r.permIn)}</td><td class="mono">${minsToHM(computePermission(r))}</td>
+  <td><button class="btn btn-outline btn-sm btn-edit" data-id="${r.id}" data-type="permission">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.id}" data-type="permission">Del</button></td></tr>`).join('')}
+  </tbody></table>`;
+  const mk = monthKey(todayStr());
+  const thisMonth = DB.permissions.filter(r=>monthKey(r.date)===mk);
+  const totalMin = thisMonth.reduce((s,r)=>s+computePermission(r),0);
+  document.getElementById('permStats').innerHTML = `
+    <div class="chip">Permissions Taken<b>${thisMonth.length}</b></div>
+    <div class="chip">Total Time<b>${minsToHM(totalMin)}</b></div>
+  `;
+}
+function renderLeaveHistory(){
+  const rows = [...DB.leaves].sort((a,b)=>b.start.localeCompare(a.start));
+  const el = document.getElementById('leaveHistory');
+  if(!rows.length){ el.innerHTML = emptyState('No leave recorded yet.'); return; }
+  el.innerHTML = `<table><thead><tr><th>Type</th><th>Start</th><th>End</th><th>Days</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td><span class="leave-type-pill ${leaveClass[r.type]}">${leaveLabel[r.type]}</span></td><td class="mono">${fmtDate(r.start)}</td><td class="mono">${fmtDate(r.end)}</td><td class="mono">${computeLeaveDays(r)}</td>
+  <td><button class="btn btn-outline btn-sm btn-edit" data-id="${r.id}" data-type="leave">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.id}" data-type="leave">Del</button></td></tr>`).join('')}
+  </tbody></table>`;
+  const mk = monthKey(todayStr());
+  const monthLeaves = DB.leaves.filter(r=>monthKey(r.start)===mk);
+  const byType = {};
+  monthLeaves.forEach(r=>{ byType[r.type]=(byType[r.type]||0)+computeLeaveDays(r); });
+  const sum = document.getElementById('leaveSummary');
+  if(!monthLeaves.length){ sum.innerHTML = emptyState('No leave taken this month.'); }
+  else{
+    sum.innerHTML = `<div class="result-strip">${Object.keys(byType).map(t=>`<div class="chip"><span class="leave-type-pill ${leaveClass[t]}">${leaveLabel[t]}</span><b>${byType[t]} day(s)</b></div>`).join('')}</div>`;
+  }
+}
+function emptyState(msg){ return `<div class="empty-state"><span class="glyph">🗂</span>${msg}</div>`; }
+
+/* =========================================================
+   OFFICE REFERENCE CHIPS
+========================================================= */
+function renderOfficeRefChips(){
+  document.getElementById('officeRefChips').innerHTML = `
+    <div class="chip">Office Start<b>${DB.settings.officeStart}</b></div>
+    <div class="chip">Office End<b>${DB.settings.officeEnd}</b></div>
+    <div class="chip">Std. Break<b>${DB.settings.stdBreak} min</b></div>
+  `;
+}
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+function renderDashboard(){
+  document.getElementById('todayDateLabel').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const today = todayStr();
+  const todayAtt = DB.attendance.find(r=>r.date===today);
+  const todayPerms = DB.permissions.filter(r=>r.date===today);
+  const mk = `${dashRefDate.getFullYear()}-${pad(dashRefDate.getMonth()+1)}`;
+  const monthLeaves = DB.leaves.filter(r=>monthKey(r.start)===mk);
+  const monthDays = new Date(Number(mk.split('-')[0]), Number(mk.split('-')[1]), 0).getDate();
+  const monthAtt = DB.attendance.filter(r=>monthKey(r.date)===mk);
+  const presentDays = monthAtt.length;
+  const leaveDays = monthLeaves.reduce((s,r)=>s+computeLeaveDays(r),0);
+  
+  let sundaysOff = 0;
+  for (let d = 1; d <= monthDays; d++) {
+    const dStr = `${mk}-${pad(d)}`;
+    if (isSunday(dStr)) {
+      const hasAtt = DB.attendance.some(r => r.date === dStr);
+      if (!hasAtt) sundaysOff++;
+    }
+  }
+  const expectedDays = Math.max(0, monthDays - sundaysOff - leaveDays);
+  const attendancePct = expectedDays > 0 ? Math.min(100, Math.round((presentDays / expectedDays) * 100)) : 0;
+
+  const todayNet = todayAtt ? computeAttendance(todayAtt, DB.settings).netM : 0;
+  const todayPermMin = todayPerms.reduce((s,r)=>s+computePermission(r),0);
+
+  const cards = [
+    {label:"Today's Working Hours", value: todayAtt ? minsToHM(todayNet) : '—'},
+    {label:"Today's Permission Time", value: todayPermMin ? minsToHM(todayPermMin) : '—'},
+    {label:"This Month's Leave", value: `${leaveDays} day(s)`},
+    {label:"Attendance %", value: `${attendancePct}%`},
+  ];
+  document.getElementById('dashboardCards').innerHTML = cards.map(c=>`
+    <div class="card stat-card"><span class="tick"></span><div class="stat-label">${c.label}</div><div class="stat-value">${c.value}</div></div>
+  `).join('');
+
+  document.getElementById('dashMonthLabel').textContent = new Date(mk+'-01T00:00:00').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const totalOT = monthAtt.reduce((s,r)=>s+computeAttendance(r,DB.settings).overtimeM,0);
+  const totalLate = monthAtt.filter(r=>computeAttendance(r,DB.settings).lateM>0).length;
+  const avgNet = presentDays ? Math.round(monthAtt.reduce((s,r)=>s+computeAttendance(r,DB.settings).netM,0)/presentDays) : 0;
+  const monthPerms = DB.permissions.filter(r=>monthKey(r.date)===mk);
+  const halfDays = monthLeaves.filter(r=>r.type==='Half').length;
+
+  document.getElementById('monthlySummaryTable').innerHTML = `
+    <table>
+      <tbody>
+        <tr><td>Total Working Days</td><td class="mono">${monthDays}</td></tr>
+        <tr><td>Present Days</td><td class="mono">${presentDays}</td></tr>
+        <tr><td>Leave Days</td><td class="mono">${leaveDays}</td></tr>
+        <tr><td>Half Days</td><td class="mono">${halfDays}</td></tr>
+        <tr><td>Total Permission Count</td><td class="mono">${monthPerms.length}</td></tr>
+        <tr><td>Total Permission Hours</td><td class="mono">${minsToHM(monthPerms.reduce((s,r)=>s+computePermission(r),0))}</td></tr>
+        <tr><td>Average Working Hours</td><td class="mono">${minsToHM(avgNet)}</td></tr>
+        <tr><td>Total Overtime</td><td class="mono">${minsToHM(totalOT)}</td></tr>
+        <tr><td>Total Late Arrivals</td><td class="mono">${totalLate}</td></tr>
+      </tbody>
+    </table>`;
+
+  renderMiniCalendar('dashCalendar', new Date(Number(mk.split('-')[0]), Number(mk.split('-')[1])-1, 1));
+}
+
+/* =========================================================
+   CALENDAR (mini + full)
+========================================================= */
+function dayStatus(dateStr){
+  const att = DB.attendance.some(r=>r.date===dateStr);
+  const perm = DB.permissions.some(r=>r.date===dateStr);
+  const leave = DB.leaves.some(r=> dateStr>=r.start && dateStr<=r.end);
+  return {att, perm, leave};
+}
+function buildCalendarGrid(container, refDate){
+  const year = refDate.getFullYear(), month = refDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const totalDays = new Date(year, month+1, 0).getDate();
+  let html = ['S','M','T','W','T','F','S'].map(d=>`<div class="cal-head">${d}</div>`).join('');
+  for(let i=0;i<firstDay;i++) html += `<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=totalDays; d++){
+    const dateStr = `${year}-${pad(month+1)}-${pad(d)}`;
+    const st = dayStatus(dateStr);
+    const isSun = isSunday(dateStr);
+    let cls = 'cal-cell';
+    if(st.leave) cls += ' leave'; 
+    else if(st.att) cls += ' present';
+    else if(isSun) cls += ' leave'; // treat Sunday as holiday (leave color) if no attendance logged
+    
+    html += `<div class="${cls}" data-date="${dateStr}"><span class="d">${d}</span>
+      <span style="display:flex;gap:3px;">${st.att&&!st.leave?'<span class="dot present"></span>':''}${st.perm?'<span class="dot perm"></span>':''}${st.leave?'<span class="dot leave"></span>':''}</span>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+function renderMiniCalendar(id, refDate){ buildCalendarGrid(document.getElementById(id), refDate); }
+let calRefDate = new Date();
+let dashRefDate = new Date();
+function renderFullCalendar(){
+  document.getElementById('calMonthLabel').textContent = calRefDate.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  buildCalendarGrid(document.getElementById('fullCalendar'), calRefDate);
+}
+document.getElementById('calPrev').addEventListener('click', ()=>{ calRefDate = new Date(calRefDate.getFullYear(), calRefDate.getMonth()-1, 1); renderFullCalendar(); });
+document.getElementById('calNext').addEventListener('click', ()=>{ calRefDate = new Date(calRefDate.getFullYear(), calRefDate.getMonth()+1, 1); renderFullCalendar(); });
+document.getElementById('dashPrevMonth').addEventListener('click', ()=>{ dashRefDate = new Date(dashRefDate.getFullYear(), dashRefDate.getMonth()-1, 1); renderDashboard(); });
+document.getElementById('dashNextMonth').addEventListener('click', ()=>{ dashRefDate = new Date(dashRefDate.getFullYear(), dashRefDate.getMonth()+1, 1); renderDashboard(); });
+
+/* =========================================================
+   HISTORY
+========================================================= */
+function populateHistFilters(){
+  const monthSel = document.getElementById('histMonth'), yearSel = document.getElementById('histYear');
+  if(!monthSel.options.length){
+    const months = ['All','January','February','March','April','May','June','July','August','September','October','November','December'];
+    monthSel.innerHTML = months.map((m,i)=>`<option value="${i===0?'all':pad(i)}">${m}</option>`).join('');
+  }
+  if(!yearSel.options.length){
+    const years = new Set(['all']);
+    [...DB.attendance,...DB.permissions].forEach(r=>years.add(r.date.slice(0,4)));
+    DB.leaves.forEach(r=>years.add(r.start.slice(0,4)));
+    years.add(String(new Date().getFullYear()));
+    yearSel.innerHTML = [...years].sort().map(y=>`<option value="${y}">${y==='all'?'All':y}</option>`).join('');
+  }
+}
+function getFilteredRecords(){
+  const searchDate = document.getElementById('histSearchDate').value;
+  const month = document.getElementById('histMonth').value;
+  const year = document.getElementById('histYear').value;
+  const type = document.getElementById('histType').value;
+  let rows = [];
+  if(type==='all'||type==='attendance') DB.attendance.forEach(r=>rows.push({kind:'Attendance', date:r.date, raw:r}));
+  if(type==='all'||type==='permission') DB.permissions.forEach(r=>rows.push({kind:'Permission', date:r.date, raw:r}));
+  if(type==='all'||type==='leave') DB.leaves.forEach(r=>rows.push({kind:'Leave', date:r.start, raw:r}));
+  rows = rows.filter(r=>{
+    if(searchDate && r.date!==searchDate) return false;
+    if(month!=='all' && r.date.slice(5,7)!==month) return false;
+    if(year!=='all' && r.date.slice(0,4)!==year) return false;
+    return true;
+  });
+  rows.sort((a,b)=>b.date.localeCompare(a.date));
+  return rows;
+}
+function renderHistory(){
+  populateHistFilters();
+  const rows = getFilteredRecords();
+  const el = document.getElementById('historyTable');
+  if(!rows.length){ el.innerHTML = emptyState('No records match these filters.'); return; }
+  el.innerHTML = `<table><thead><tr><th>Type</th><th>Date</th><th>Details</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>{
+    let details='', actions='';
+    if(r.kind==='Attendance'){
+      const c = computeAttendance(r.raw, DB.settings);
+      details = `In ${to12Hr(r.raw.inTime)} → Out ${to12Hr(r.raw.outTime)} · Net ${minsToHM(c.netM)}`;
+      actions = `<button class="btn btn-outline btn-sm btn-edit" data-id="${r.raw.id}" data-type="attendance">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.raw.id}" data-type="attendance">Del</button>`;
+    } else if(r.kind==='Permission'){
+      details = `Out ${to12Hr(r.raw.permOut)} → In ${to12Hr(r.raw.permIn)} · ${minsToHM(computePermission(r.raw))}`;
+      actions = `<button class="btn btn-outline btn-sm btn-edit" data-id="${r.raw.id}" data-type="permission">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.raw.id}" data-type="permission">Del</button>`;
+    } else {
+      details = `<span class="leave-type-pill ${leaveClass[r.raw.type]}">${leaveLabel[r.raw.type]}</span> ${fmtDate(r.raw.start)} → ${fmtDate(r.raw.end)} · ${computeLeaveDays(r.raw)} day(s)`;
+      actions = `<button class="btn btn-outline btn-sm btn-edit" data-id="${r.raw.id}" data-type="leave">Edit</button> <button class="btn btn-danger btn-sm btn-delete" data-id="${r.raw.id}" data-type="leave">Del</button>`;
+    }
+    return `<tr><td>${r.kind}</td><td class="mono">${fmtDate(r.date)}</td><td>${details}</td><td>${actions}</td></tr>`;
+  }).join('')}
+  </tbody></table>`;
+}
+['histSearchDate','histMonth','histYear','histType'].forEach(id=>document.getElementById(id).addEventListener('input', renderHistory));
+document.getElementById('histClear').addEventListener('click', ()=>{
+  document.getElementById('histSearchDate').value='';
+  document.getElementById('histMonth').value='all';
+  document.getElementById('histYear').value='all';
+  document.getElementById('histType').value='all';
+  renderHistory();
+});
+
+/* =========================================================
+   EXPORTS
+========================================================= */
+function buildExportRows(){
+  return getFilteredRecords().map(r=>{
+    if(r.kind==='Attendance'){
+      const c = computeAttendance(r.raw, DB.settings);
+      return {Type:'Attendance', Date:r.raw.date, In:to12Hr(r.raw.inTime), Out:to12Hr(r.raw.outTime), Break_min:r.raw.breakMinutes, Net:minsToHM(c.netM), Late:minsToHM(c.lateM), Overtime:minsToHM(c.overtimeM)};
+    }
+    if(r.kind==='Permission'){
+      return {Type:'Permission', Date:r.raw.date, Out:to12Hr(r.raw.permOut), In:to12Hr(r.raw.permIn), Duration:minsToHM(computePermission(r.raw))};
+    }
+    return {Type:'Leave', LeaveType:leaveLabel[r.raw.type], Start:r.raw.start, End:r.raw.end, Days:computeLeaveDays(r.raw)};
+  });
+}
+document.getElementById('exportCSV').addEventListener('click', ()=>{
+  const rows = buildExportRows();
+  if(!rows.length){ alert('Nothing to export.'); return; }
+  const headers = [...new Set(rows.flatMap(r=>Object.keys(r)))];
+  const csv = [headers.join(',')].concat(rows.map(r=>headers.map(h=>`"${r[h]??''}"`).join(','))).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`oitc_history_${todayStr()}.csv`; a.click();
+});
+
+document.getElementById('exportXLSX').addEventListener('click', ()=>{
+  const rows = buildExportRows();
+  if(!rows.length){ alert('Nothing to export.'); return; }
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Office Records");
+  XLSX.writeFile(workbook, `oitc_history_${todayStr()}.xlsx`);
+});
+
+document.getElementById('exportPDF').addEventListener('click', ()=>{
+  const rows = buildExportRows();
+  if(!rows.length){ alert('Nothing to export.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFont("Helvetica");
+  doc.setFontSize(16);
+  doc.text("Office Attendance & Leave Report", 14, 18);
+  doc.setFontSize(10);
+  doc.text(`Generated on: ${fmtDate(todayStr())}`, 14, 25);
+  
+  const headers = Object.keys(rows[0]);
+  const body = rows.map(r => headers.map(h => r[h] ?? ''));
+  
+  doc.autoTable({
+    startY: 30,
+    head: [headers],
+    body: body,
+    theme: 'striped',
+    headStyles: { fillColor: [47, 122, 120] },
+    styles: { fontSize: 9 }
+  });
+  
+  doc.save(`oitc_report_${todayStr()}.pdf`);
+});
+
+document.getElementById('printSheet').addEventListener('click', ()=>{
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('print-target'));
+  document.getElementById('panel-history').classList.add('print-target');
+  window.print();
+});
+
+/* =========================================================
+   REPORTS / CHARTS
+========================================================= */
+let chartWorkingInstance = null;
+let chartPermissionInstance = null;
+let chartLeaveInstance = null;
+let chartAttendanceInstance = null;
+
+function destroyCharts() {
+  if (chartWorkingInstance) { chartWorkingInstance.destroy(); chartWorkingInstance = null; }
+  if (chartPermissionInstance) { chartPermissionInstance.destroy(); chartPermissionInstance = null; }
+  if (chartLeaveInstance) { chartLeaveInstance.destroy(); chartLeaveInstance = null; }
+  if (chartAttendanceInstance) { chartAttendanceInstance.destroy(); chartAttendanceInstance = null; }
+}
+
+function renderCharts(force = false) {
+  const activeTab = document.querySelector('.tab-btn.active');
+  if (!activeTab || activeTab.dataset.tab !== 'reports') return;
+
+  const range = document.getElementById('reportRange').value;
+  const isDark = DB.settings.theme === 'dark';
+  const textColor = isDark ? '#93A2B2' : '#5B6B7C';
+  const gridColor = isDark ? '#2A3542' : '#E1DDD1';
+
+  Chart.defaults.color = textColor;
+  Chart.defaults.borderColor = gridColor;
+  Chart.defaults.font.family = "'Inter', sans-serif";
+
+  destroyCharts();
+
+  const today = todayStr();
+  const currentYear = new Date().getFullYear();
+  const currentMonthKey = monthKey(today);
+
+  let attData = [];
+  let permData = [];
+  let leaveData = [];
+
+  if (range === 'week') {
+    attData = [...DB.attendance].sort((a,b)=>a.date.localeCompare(b.date)).slice(-7);
+    permData = [...DB.permissions].sort((a,b)=>a.date.localeCompare(b.date)).slice(-7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const dateStr = thirtyDaysAgo.toISOString().slice(0, 10);
+    leaveData = DB.leaves.filter(r => r.start >= dateStr);
+  } else if (range === 'month') {
+    attData = DB.attendance.filter(r => monthKey(r.date) === currentMonthKey).sort((a,b)=>a.date.localeCompare(b.date));
+    permData = DB.permissions.filter(r => monthKey(r.date) === currentMonthKey).sort((a,b)=>a.date.localeCompare(b.date));
+    leaveData = DB.leaves.filter(r => monthKey(r.start) === currentMonthKey);
+  } else if (range === 'year') {
+    const yearStr = String(currentYear);
+    attData = DB.attendance.filter(r => r.date.startsWith(yearStr)).sort((a,b)=>a.date.localeCompare(b.date));
+    permData = DB.permissions.filter(r => r.date.startsWith(yearStr)).sort((a,b)=>a.date.localeCompare(b.date));
+    leaveData = DB.leaves.filter(r => r.start.startsWith(yearStr));
+  }
+
+  // 1. Working Hours Chart
+  let workingLabels = [];
+  let workingValues = [];
+  if (range === 'week' || range === 'month') {
+    workingLabels = attData.map(r => fmtDate(r.date));
+    workingValues = attData.map(r => {
+      const c = computeAttendance(r, DB.settings);
+      return parseFloat((c.netM / 60).toFixed(2));
+    });
+  } else {
+    workingLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    workingValues = Array(12).fill(0);
+    const counts = Array(12).fill(0);
+    attData.forEach(r => {
+      const m = parseInt(r.date.slice(5, 7)) - 1;
+      const c = computeAttendance(r, DB.settings);
+      workingValues[m] += c.netM;
+      counts[m]++;
+    });
+    for(let i=0; i<12; i++) {
+      workingValues[i] = counts[i] ? parseFloat((workingValues[i] / counts[i] / 60).toFixed(2)) : 0;
+    }
+  }
+
+  const ctxWorking = document.getElementById('chartWorking').getContext('2d');
+  chartWorkingInstance = new Chart(ctxWorking, {
+    type: 'bar',
+    data: {
+      labels: workingLabels,
+      datasets: [{
+        label: 'Net Working Hours',
+        data: workingValues,
+        backgroundColor: '#2F7A78',
+        borderColor: '#245F5D',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { title: { display: true, text: 'Hours' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // 2. Permission Hours Chart
+  let permLabels = [];
+  let permValues = [];
+  if (range === 'week' || range === 'month') {
+    const dates = [...new Set(permData.map(p => p.date))].sort();
+    permLabels = dates.map(d => fmtDate(d));
+    permValues = dates.map(d => {
+      const dayPerms = permData.filter(p => p.date === d);
+      const totalM = dayPerms.reduce((sum, p) => sum + computePermission(p), 0);
+      return parseFloat((totalM / 60).toFixed(2));
+    });
+  } else {
+    permLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    permValues = Array(12).fill(0);
+    permData.forEach(r => {
+      const m = parseInt(r.date.slice(5, 7)) - 1;
+      permValues[m] += computePermission(r);
+    });
+    for(let i=0; i<12; i++) {
+      permValues[i] = parseFloat((permValues[i] / 60).toFixed(2));
+    }
+  }
+
+  const ctxPermission = document.getElementById('chartPermission').getContext('2d');
+  chartPermissionInstance = new Chart(ctxPermission, {
+    type: 'bar',
+    data: {
+      labels: permLabels,
+      datasets: [{
+        label: 'Permission Hours',
+        data: permValues,
+        backgroundColor: '#E2963A',
+        borderColor: '#BE7825',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { title: { display: true, text: 'Hours' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // 3. Leave Summary Chart
+  const leaveTypes = ['Casual', 'Sick', 'Half', 'WFH', 'LOP'];
+  const leaveColors = ['#2F7A78', '#C0483D', '#E2963A', '#3F8F5F', '#9C3B2F'];
+  const leaveCounts = Array(leaveTypes.length).fill(0);
+  
+  leaveData.forEach(r => {
+    const idx = leaveTypes.indexOf(r.type);
+    if (idx > -1) {
+      leaveCounts[idx] += computeLeaveDays(r);
+    }
+  });
+
+  const ctxLeave = document.getElementById('chartLeave').getContext('2d');
+  chartLeaveInstance = new Chart(ctxLeave, {
+    type: 'doughnut',
+    data: {
+      labels: leaveTypes.map(t => leaveLabel[t]),
+      datasets: [{
+        data: leaveCounts,
+        backgroundColor: leaveColors,
+        borderWidth: isDark ? 2 : 1,
+        borderColor: isDark ? '#1B2530' : '#FFFFFF'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } }
+    }
+  });
+
+  // 4. Attendance Percentage Chart
+  let presentDaysCount = 0;
+  let leaveDaysCount = 0;
+  let totalDaysCount = 0;
+
+  if (range === 'week') {
+    totalDaysCount = 7;
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    dates.forEach(dStr => {
+      const hasAtt = DB.attendance.some(r => r.date === dStr);
+      const hasLeave = DB.leaves.some(r => dStr >= r.start && dStr <= r.end);
+      const isSun = isSunday(dStr);
+      if (hasAtt) presentDaysCount++;
+      else if (hasLeave || isSun) leaveDaysCount++;
+    });
+  } else if (range === 'month') {
+    const parts = currentMonthKey.split('-');
+    totalDaysCount = new Date(parseInt(parts[0]), parseInt(parts[1]), 0).getDate();
+    for (let d = 1; d <= totalDaysCount; d++) {
+      const dStr = `${parts[0]}-${pad(parts[1])}-${pad(d)}`;
+      const hasAtt = DB.attendance.some(r => r.date === dStr);
+      const hasLeave = DB.leaves.some(r => dStr >= r.start && dStr <= r.end);
+      const isSun = isSunday(dStr);
+      if (hasAtt) presentDaysCount++;
+      else if (hasLeave || isSun) leaveDaysCount++;
+    }
+  } else {
+    const startOfYear = new Date(currentYear, 0, 1);
+    const todayDate = new Date();
+    totalDaysCount = Math.round((todayDate - startOfYear) / 86400000) + 1;
+    DB.attendance.forEach(r => {
+      if (r.date.startsWith(String(currentYear))) presentDaysCount++;
+    });
+    DB.leaves.forEach(r => {
+      if (r.start.startsWith(String(currentYear))) {
+        leaveDaysCount += computeLeaveDays(r);
+      }
+    });
+    // Add all Sundays of the year where there is no attendance as leave/off days
+    let dStart = new Date(currentYear, 0, 1);
+    while (dStart <= todayDate) {
+      const dStr = `${dStart.getFullYear()}-${pad(dStart.getMonth()+1)}-${pad(dStart.getDate())}`;
+      if (isSunday(dStr)) {
+        const hasAtt = DB.attendance.some(r => r.date === dStr);
+        if (!hasAtt) leaveDaysCount++;
+      }
+      dStart.setDate(dStart.getDate() + 1);
+    }
+  }
+
+  const absentDaysCount = Math.max(0, totalDaysCount - presentDaysCount - leaveDaysCount);
+
+  const ctxAttendance = document.getElementById('chartAttendance').getContext('2d');
+  chartAttendanceInstance = new Chart(ctxAttendance, {
+    type: 'doughnut',
+    data: {
+      labels: ['Present', 'Leave', 'Absent/Unaccounted'],
+      datasets: [{
+        data: [presentDaysCount, leaveDaysCount, absentDaysCount],
+        backgroundColor: ['#2F7A78', '#C0483D', '#E1DDD1'],
+        borderWidth: isDark ? 2 : 1,
+        borderColor: isDark ? '#1B2530' : '#FFFFFF'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } }
+    }
+  });
+}
+
+document.getElementById('reportRange').addEventListener('change', () => renderCharts(true));
+
+/* =========================================================
+   EVENT DELEGATION (EDIT/DELETE/CLOCK)
+========================================================= */
+document.addEventListener('click', e => {
+  const editBtn = e.target.closest('.btn-edit');
+  const delBtn = e.target.closest('.btn-delete');
+  const pickerBtn = e.target.closest('.btn-clock-picker');
+  const cell = e.target.closest('.cal-cell');
+  
+  if (cell && cell.dataset.date) {
+    const dateStr = cell.dataset.date;
+    document.getElementById('attDate').value = dateStr;
+    attForm.reset();
+    document.getElementById('attDate').value = dateStr;
+    applyDefaultTimes();
+    document.getElementById('attEditId').value='';
+    document.getElementById('attCancelEdit').style.display='none';
+    
+    // Switch to Attendance tab
+    const attTabBtn = document.querySelector('[data-tab="attendance"]');
+    if (attTabBtn) attTabBtn.click();
+    
+    // Run live preview
+    attLivePreview();
+    return;
+  }
+  
+  if (editBtn) {
+    const id = editBtn.dataset.id;
+    const type = editBtn.dataset.type;
+    if (type === 'attendance') editAttendance(id);
+    else if (type === 'permission') editPermission(id);
+    else if (type === 'leave') editLeave(id);
+  }
+  
+  if (delBtn) {
+    const id = delBtn.dataset.id;
+    const type = delBtn.dataset.type;
+    if (type === 'attendance') deleteAttendance(id);
+    else if (type === 'permission') deletePermission(id);
+    else if (type === 'leave') deleteLeave(id);
+  }
+  
+  if (pickerBtn) {
+    const group = pickerBtn.closest('.time-select-group');
+    if (group) openClockPicker(group.id);
+  }
+});
+
+/* =========================================================
+   RENDER CENTRAL MANAGER
+========================================================= */
+function renderAll() {
+  renderRecentAttendance();
+  renderPermissionHistory();
+  renderLeaveHistory();
+  renderOfficeRefChips();
+  renderDashboard();
+  renderHistory();
+  renderCharts();
+}
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+function init() {
+  applyTheme();
+  populateTimeDropdowns();
+  applyDefaultTimes();
+  fillSettingsForm();
+  renderAll();
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
